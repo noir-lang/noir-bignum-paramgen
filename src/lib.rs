@@ -2,7 +2,6 @@
 // use base64ct::{Base64, Encoding};
 use num_bigint::BigUint;
 use num_traits::Num;
-use std::env;
 
 
 /**
@@ -32,8 +31,7 @@ pub fn compute_barrett_reduction_parameter(modulus: &BigUint) -> BigUint {
 /**
  * @brief split a BigUint into a vector of 120-bit slices 
  */
-pub fn split_into_120_bit_limbs(_input: &BigUint) -> Vec<BigUint> {
-    let num_bits = _input.bits();
+pub fn split_into_120_bit_limbs(_input: &BigUint, num_bits: usize) -> Vec<BigUint> {
     let num_limbs: usize = (num_bits / 120) + (num_bits % 120 != 0) as usize;
     let mut input = _input.clone();
     let one: BigUint = BigUint::from(1 as u64);
@@ -54,8 +52,7 @@ pub fn split_into_120_bit_limbs(_input: &BigUint) -> Vec<BigUint> {
  * @details the 60-bit slices represent a noir U60Repr object. NUM_CHUNKS reqpresents the size-multiplier of the U60Repr
  *          (either 2 or 4)
  */
-pub fn split_into_60_bit_limbs<const NUM_CHUNKS: usize>(_input: &BigUint) -> [Vec<BigUint>; NUM_CHUNKS] {
-    let num_bits = _input.bits();
+pub fn split_into_60_bit_limbs<const NUM_CHUNKS: usize>(_input: &BigUint, num_bits: usize) -> [Vec<BigUint>; NUM_CHUNKS] {
     let num_limbs: usize = (num_bits / 120) + (num_bits % 120 != 0) as usize;
      let mut input = _input.clone();
     let one = BigUint::from(1 as u64);
@@ -75,13 +72,13 @@ pub fn split_into_60_bit_limbs<const NUM_CHUNKS: usize>(_input: &BigUint) -> [Ve
 /**
  * @brief given a modulus BigUint, compute a BNInstance object
  */
-pub fn compute_bn_instance_parameters(modulus: &BigUint) -> BNInstance {
-    let modulus_limbs = split_into_120_bit_limbs(&modulus);
-    let double_modulus = compute_double_modulus(&modulus);
-    let modulus_u60: [Vec<BigUint>; 2] = split_into_60_bit_limbs(&modulus);
-    let modulus_u60_x4: [Vec<BigUint>; 4] = split_into_60_bit_limbs(&modulus);
+fn compute_bn_instance_parameters(modulus: &BigUint, num_bits: usize) -> BNInstance {
+    let modulus_limbs = split_into_120_bit_limbs(&modulus, num_bits);
+    let double_modulus = compute_double_modulus(&modulus, num_bits);
+    let modulus_u60: [Vec<BigUint>; 2] = split_into_60_bit_limbs(&modulus, num_bits);
+    let modulus_u60_x4: [Vec<BigUint>; 4] = split_into_60_bit_limbs(&modulus, num_bits);
     let redc_param =
-        split_into_120_bit_limbs(&compute_barrett_reduction_parameter(&modulus));
+        split_into_120_bit_limbs(&compute_barrett_reduction_parameter(&modulus), num_bits);
     BNInstance {
         modulus: modulus_limbs,
         double_modulus,
@@ -94,7 +91,7 @@ pub fn compute_bn_instance_parameters(modulus: &BigUint) -> BNInstance {
 /**
  * @brief given a BNInstance, construct a string that represents noir code that defines a BigNumInstance object
  */
-pub fn compute_bn_instance_string(num_bits: usize, instance: &BNInstance, name: String) -> String {
+fn compute_bn_instance_string(num_bits: usize, instance: &BNInstance, name: String) -> String {
     let BNInstance {
         modulus,
         double_modulus,
@@ -207,7 +204,7 @@ impl BigNumParamsTrait<{}> for {}_Params {{
 /**
  * @brief given a BNInstance, construct a string that represents noir code that defines a runtime_bignum::BigNumInstance object
  */
-pub fn compute_runtime_bn_instance_string(
+fn compute_runtime_bn_instance_string(
     num_bits: usize,
     instance: BNInstance,
     name: String,
@@ -297,9 +294,22 @@ pub fn bn_runtime_instance_from_string(
 ) -> String {
     let modulus = bignum_from_string(modulus_str);
     let num_bits = modulus.bits();
-    let result = compute_runtime_bn_instance_string(num_bits, compute_bn_instance_parameters(&modulus), name);
+    let result = compute_runtime_bn_instance_string(num_bits, compute_bn_instance_parameters(&modulus, num_bits), name);
     result
 }
+
+/**
+ * @brief Compute noir code for a runtime_bignum::BigNumInstance given a modulus String
+ */
+pub fn bn_runtime_instance(
+    modulus: BigUint,
+    num_bits: usize,
+    name: String
+) -> String {
+    let result = compute_runtime_bn_instance_string(num_bits, compute_bn_instance_parameters(&modulus, num_bits), name);
+    result
+}
+
 
 /**
  * @brief Compute noir code for a bignum::BigNumInstance given a modulus String
@@ -310,7 +320,7 @@ pub fn bn_instance_from_string(
 ) -> String {
     let modulus = bignum_from_string(modulus_str);
     let num_bits = modulus.bits();
-    let result = compute_bn_instance_string(num_bits, &compute_bn_instance_parameters(&modulus), name.clone());
+    let result = compute_bn_instance_string(num_bits, &compute_bn_instance_parameters(&modulus, num_bits), name.clone());
     result
 }
 
@@ -320,8 +330,19 @@ pub fn bn_instance_from_string(
 pub fn bn_limbs_from_string(
     bn_str: String
 ) -> String {
+    
     let bn = bignum_from_string(bn_str);
-    let limbs = split_into_120_bit_limbs(&bn);
+    bn_limbs(bn.clone(), bn.bits())
+}
+
+/**
+ * @brief Compute noir code for an array of 120-bit limbs that represents a BigNum object
+ */
+pub fn bn_limbs(
+    bn: BigUint,
+    num_bits: usize
+) -> String {
+    let limbs = split_into_120_bit_limbs(&bn, num_bits);
     
     let mut r = String::from("[");
     for i in 0..limbs.len() - 1 {
@@ -337,11 +358,22 @@ pub fn bn_limbs_from_string(
  * @brief Compute noir code for an array of 120-bit limbs that represents a Barrett reduction parameter
  */
 pub fn redc_limbs_from_string(
-    bn_str: String
+    bn_str: String,
 ) -> String {
     let bn = bignum_from_string(bn_str);
+    redc_limbs(bn.clone(), bn.bits())
+}
+
+
+/**
+ * @brief Compute noir code for an array of 120-bit limbs that represents a Barrett reduction parameter
+ */
+pub fn redc_limbs(
+    bn: BigUint,
+    num_bits: usize
+) -> String {
     let redc_param = compute_barrett_reduction_parameter(&bn);
-    let limbs = split_into_120_bit_limbs(&redc_param);
+    let limbs = split_into_120_bit_limbs(&redc_param, num_bits);
     
     let mut r = String::from("[");
     for i in 0..limbs.len() - 1 {
@@ -354,11 +386,11 @@ pub fn redc_limbs_from_string(
 }
 
 
-pub fn compute_double_modulus(modulus: &BigUint) -> Vec<BigUint> {
+pub fn compute_double_modulus(modulus: &BigUint, num_bits: usize) -> Vec<BigUint> {
     let double_modulus = modulus.clone() + modulus.clone();
 
     let shift = BigUint::from(1 as u64) << 120;
-    let mut limbs = split_into_120_bit_limbs(&double_modulus);
+    let mut limbs = split_into_120_bit_limbs(&double_modulus, num_bits);
     let num_limbs = limbs.len();
     limbs[0] += shift.clone();
     for i in 1..num_limbs - 1 {
