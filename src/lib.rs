@@ -394,7 +394,7 @@ pub fn compute_double_modulus(modulus: &BigUint, num_bits: usize) -> Vec<BigUint
     let num_limbs = limbs.len();
     limbs[0] += shift.clone();
     for i in 1..num_limbs - 1 {
-        limbs[i] = limbs[i].clone() - BigUint::from(1 as u64) + shift.clone();
+        limbs[i] = limbs[i].clone() + shift.clone() - BigUint::from(1 as u64);
     }
     limbs[num_limbs - 1] = limbs[num_limbs - 1].clone() - BigUint::from(1 as u64);
     limbs
