@@ -15,6 +15,7 @@ struct BNInstance {
     redc_param: Vec<BigUint>,
 }
 
+const BARRETT_REDUCTION_OVERFLOW_BITS: usize = 4;
 /**
  * @brief compute the reduction parameter used in Barrett reduction
  *        redc param = 2 * ceil(log2(modulus))
@@ -23,8 +24,35 @@ struct BNInstance {
  */
 pub fn compute_barrett_reduction_parameter(modulus: &BigUint) -> BigUint {
     let k = modulus.bits();
-    let multiplicand = BigUint::new([1].to_vec()) << (k as usize * 2);
-    let barrett_reduction_parameter: BigUint = multiplicand / modulus;
+    let multiplicand = BigUint::new([1].to_vec()) << (k as usize * 2 + BARRETT_REDUCTION_OVERFLOW_BITS);
+    let barrett_reduction_parameter: BigUint = (multiplicand) / modulus;
+
+
+//    let x: &str = "0x17f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb";
+//    let x = bignum_from_string(x.to_string());
+
+//     let xxx = x.clone() + x.clone() + x.clone();
+//     let x = x.clone();
+//     let xxx_squared = xxx * x;
+
+//     let x_mul_redc = xxx_squared.clone() * barrett_reduction_parameter.clone();
+//     let shifted = x_mul_redc >> (k + k + BARRETT_REDUCTION_OVERFLOW_BITS);
+
+//     let quotient_mul_modulus = shifted * modulus.clone();
+
+//     let mut remainder_initial =  xxx_squared.clone() -quotient_mul_modulus.clone();
+
+//     if (remainder_initial.clone() >= modulus.clone())
+//     {
+//         remainder_initial = remainder_initial - modulus.clone();
+//     }
+//     // let ff = remainder_initial.as
+//     let bytes = remainder_initial.to_bytes_be();
+//    let encoded = hex::encode(&bytes);
+//    let mut r: String = String::from("");
+//    r += &format!("0x{}, ", hex::encode(&bytes));
+//     println!("REMAINDER = {remainder_initial}");
+//     println!("formatted = {r}");
     barrett_reduction_parameter
 }
 
@@ -91,7 +119,7 @@ fn compute_bn_instance_parameters(modulus: &BigUint, num_bits: usize) -> BNInsta
 /**
  * @brief given a BNInstance, construct a string that represents noir code that defines a BigNumInstance object
  */
-fn compute_bn_instance_string(num_bits: usize, instance: &BNInstance, name: String) -> String {
+fn compute_bn_instance_string(num_bits: usize, instance: &BNInstance, name: String, underscore_split: bool) -> String {
     let BNInstance {
         modulus,
         double_modulus,
@@ -103,26 +131,38 @@ fn compute_bn_instance_string(num_bits: usize, instance: &BNInstance, name: Stri
 
     let bits: String = String::from(itoa::Buffer::new().format(num_bits as u64));
     let limbs: String = String::from(itoa::Buffer::new().format(num_limbs as u64));
-    let tparam: String = name.clone() + &String::from("_Params");
+
+    let mut params: String = String::from("Params");
+    if underscore_split
+    {
+        params= String::from("_Params");
+    }
+
+    let tparam: String = name.clone() + &params;
 
     let mut param_str: String = String::from("");
-    param_str += &String::from(format!("struct {}_Params {{}}
-impl RuntimeBigNumParamsTrait<{}> for {}_Params {{
-    pub fn modulus_bits() -> u64 {{
+    param_str += &String::from(format!("
+use crate::BigNumParamsTrait;
+use crate::runtime_bignum::BigNumInstance;
+use crate::runtime_bignum::BigNumParamsTrait as RuntimeBigNumParamsTrait;
+use crate::utils::u60_representation::U60Repr;
+pub struct {}{} {{}}
+impl RuntimeBigNumParamsTrait<{}> for {}{} {{
+    fn modulus_bits() -> u32 {{
         {}
     }}
 }}
-impl BigNumParamsTrait<{}> for {}_Params {{
-    pub fn get_instance() -> BigNumInstance<{}, Self> {{
+impl BigNumParamsTrait<{}> for {}{} {{
+    fn get_instance() -> BigNumInstance<{}, Self> {{
         {}_Instance
     }}
-    pub fn modulus_bits() -> u64 {{
+    fn modulus_bits() -> u32 {{
         {}
     }}
-}}", name, limbs, name, bits, limbs, name, limbs, name, bits));
+}}", name, params, limbs, name, params, bits, limbs, name, params, limbs, name, bits));
 
     let mut r: String = String::from("");
-    r += &String::from(format!("global {}_Instance: BigNumInstance<{}, {}> = BigNumInstance {{
+    r += &String::from(format!("pub global {}_Instance: BigNumInstance<{}, {}> = BigNumInstance {{
         modulus: [
             ",
         name.as_str(), limbs, tparam)
@@ -147,7 +187,7 @@ impl BigNumParamsTrait<{}> for {}_Params {{
     r += &format!(
         "0x{}
         ],
-        modulus_u60: U60Repr {{ limbs: ArrayX {{ segments: [[
+        modulus_u60: U60Repr {{ limbs: [
             ",
         hex::encode(&bytes)
     );
@@ -158,11 +198,11 @@ impl BigNumParamsTrait<{}> for {}_Params {{
         }
         let bytes = modulus_u60[j][num_limbs as usize - 1].to_bytes_be();
         if j == 0 {
-            r += &format!("0x{}], [", hex::encode(&bytes));
+            r += &format!("0x{}, ", hex::encode(&bytes));
         } else {
             r += &format!(
-                "0x{}]] }} }},
-        modulus_u60_x4: U60Repr {{ limbs: ArrayX {{ segments: [[
+                "0x{}]}},
+        modulus_u60_x4: U60Repr {{ limbs: [
             ",
                 hex::encode(&bytes)
             );
@@ -176,10 +216,10 @@ impl BigNumParamsTrait<{}> for {}_Params {{
         }
         let bytes = modulus_u60_x4[j][num_limbs as usize - 1].to_bytes_be();
         if j < 3 {
-            r += &format!("0x{}], [", hex::encode(&bytes));
+            r += &format!("0x{}, ", hex::encode(&bytes));
         } else {
             r += &format!(
-                "0x{}]] }} }},
+                "0x{}] }},
         redc_param: [
             ",
                 hex::encode(&bytes)
@@ -316,11 +356,12 @@ pub fn bn_runtime_instance(
  */
 pub fn bn_instance_from_string(
     modulus_str: String,
-    name: String
+    name: String,
+    is_uint: bool
 ) -> String {
     let modulus = bignum_from_string(modulus_str);
     let num_bits = modulus.bits();
-    let result = compute_bn_instance_string(num_bits, &compute_bn_instance_parameters(&modulus, num_bits), name.clone());
+    let result = compute_bn_instance_string(num_bits, &compute_bn_instance_parameters(&modulus, num_bits), name.clone(), !is_uint);
     result
 }
 
