@@ -2,7 +2,7 @@
 // use base64ct::{Base64, Encoding};
 use num_bigint::BigUint;
 use num_traits::Num;
-
+use num_prime::nt_funcs::is_prime;
 
 /**
  * @brief mirrors the noir BigNumInstance object, where each noir Field element is a BigUint element
@@ -116,6 +116,8 @@ fn compute_bn_instance_parameters(modulus: &BigUint, num_bits: usize) -> BNInsta
     }
 }
 
+
+
 /**
  * @brief given a BNInstance, construct a string that represents noir code that defines a BigNumInstance object
  */
@@ -142,30 +144,24 @@ fn compute_bn_instance_string(num_bits: usize, instance: &BNInstance, name: Stri
 
     let mut param_str: String = String::from("");
     param_str += &String::from(format!("
-use crate::BigNumParamsTrait;
-use crate::runtime_bignum::BigNumInstance;
-use crate::runtime_bignum::BigNumParamsTrait as RuntimeBigNumParamsTrait;
+use crate::params::BigNumParams;
+use crate::params::BigNumParamsGetter;
 use crate::utils::u60_representation::U60Repr;
+
 pub struct {}{} {{}}
-impl RuntimeBigNumParamsTrait<{}> for {}{} {{
-    fn modulus_bits() -> u32 {{
-        {}
+
+impl BigNumParamsGetter<{},{}> for {}{} {{
+    fn get_params() -> BigNumParams<{}, {}> {{
+        {}_PARAMS
     }}
-}}
-impl BigNumParamsTrait<{}> for {}{} {{
-    fn get_instance() -> BigNumInstance<{}, Self> {{
-        {}_Instance
-    }}
-    fn modulus_bits() -> u32 {{
-        {}
-    }}
-}}", name, params, limbs, name, params, bits, limbs, name, params, limbs, name, bits));
+    }}", name, params, limbs, bits, name, params, limbs, bits, name));
 
     let mut r: String = String::from("");
-    r += &String::from(format!("pub global {}_Instance: BigNumInstance<{}, {}> = BigNumInstance {{
+    r += &String::from(format!("pub global {}_PARAMS: BigNumParams<{}, {}> = BigNumParams {{
+        has_multiplicative_inverse: \"is your modulus prime?\",
         modulus: [
             ",
-        name.as_str(), limbs, tparam)
+        name.as_str(), limbs, bits)
     );
     for i in 0..num_limbs - 1 {
         let bytes = modulus[i].to_bytes_be();
