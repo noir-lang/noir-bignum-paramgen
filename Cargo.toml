@@ -21,3 +21,4 @@ num-bigint = { version = "0.8.2", features = ["i128", "prime", "zeroize"], defau
 num-traits = { version= "0.2.9", default-features = false, features = ["libm"] }
 num-integer = { version = "0.1.39", default-features = false }
 num-prime = "0.4.3"
+rand = "0.8.5"

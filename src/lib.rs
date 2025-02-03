@@ -1,13 +1,14 @@
 
 // use base64ct::{Base64, Encoding};
-use num_bigint::BigUint;
+use num_bigint::{BigUint, RandomBits};
 use num_traits::Num;
-use num_prime::nt_funcs::is_prime;
+use rand::Rng;
 
 /**
  * @brief mirrors the noir BigNumInstance object, where each noir Field element is a BigUint element
  */
 struct BNInstance {
+    has_multiplicative_inverse: bool,
     modulus: Vec<BigUint>,
     double_modulus: Vec<BigUint>,
     modulus_u60: [Vec<BigUint>; 2],
@@ -105,9 +106,11 @@ fn compute_bn_instance_parameters(modulus: &BigUint, num_bits: usize) -> BNInsta
     let double_modulus = compute_double_modulus(&modulus, num_bits);
     let modulus_u60: [Vec<BigUint>; 2] = split_into_60_bit_limbs(&modulus, num_bits);
     let modulus_u60_x4: [Vec<BigUint>; 4] = split_into_60_bit_limbs(&modulus, num_bits);
+    let has_multiplicative_inverse = is_prime(&modulus);
     let redc_param =
         split_into_120_bit_limbs(&compute_barrett_reduction_parameter(&modulus), num_bits);
     BNInstance {
+        has_multiplicative_inverse,
         modulus: modulus_limbs,
         double_modulus,
         modulus_u60,
@@ -123,6 +126,7 @@ fn compute_bn_instance_parameters(modulus: &BigUint, num_bits: usize) -> BNInsta
  */
 fn compute_bn_instance_string(num_bits: usize, instance: &BNInstance, name: String, underscore_split: bool) -> String {
     let BNInstance {
+        has_multiplicative_inverse,
         modulus,
         double_modulus,
         modulus_u60,
@@ -158,10 +162,10 @@ impl BigNumParamsGetter<{},{}> for {}{} {{
 
     let mut r: String = String::from("");
     r += &String::from(format!("pub global {}_PARAMS: BigNumParams<{}, {}> = BigNumParams {{
-        has_multiplicative_inverse: \"is your modulus prime?\",
+        has_multiplicative_inverse: {},
         modulus: [
             ",
-        name.as_str(), limbs, bits)
+        name.as_str(), limbs, bits, has_multiplicative_inverse)
     );
     for i in 0..num_limbs - 1 {
         let bytes = modulus[i].to_bytes_be();
@@ -246,6 +250,7 @@ fn compute_runtime_bn_instance_string(
     name: String,
 ) -> String {
     let BNInstance {
+        has_multiplicative_inverse,
         modulus,
         double_modulus: _,
         modulus_u60: _,
@@ -435,4 +440,16 @@ pub fn compute_double_modulus(modulus: &BigUint, num_bits: usize) -> Vec<BigUint
     }
     limbs[num_limbs - 1] = limbs[num_limbs - 1].clone() - BigUint::from(1 as u64);
     limbs
+}
+
+
+pub fn is_prime(modulus: &BigUint) -> bool { 
+    // we implement a fermat primality test
+    //pick a random number less than the modulus
+    let mut rng = rand::thread_rng();
+    let num_bits = modulus.bits();
+    let a: BigUint = rng.sample(RandomBits::new(num_bits));
+    let modulus_minus_1 = modulus.clone() - BigUint::from(1 as u64);
+    let a_to_the_power = a.modpow(&modulus_minus_1, modulus);
+    a_to_the_power == BigUint::from(1 as u64)
 }

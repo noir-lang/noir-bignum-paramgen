@@ -136,6 +136,7 @@ dependencies = [
  "num-integer",
  "num-prime",
  "num-traits",
+ "rand",
 ]
 
 [[package]]
