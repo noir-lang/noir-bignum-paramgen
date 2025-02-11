@@ -153,26 +153,34 @@ fn compute_bn_instance_string(
     let mut param_str: String = String::from("");
     param_str += &String::from(format!(
         "
+use crate::bignum::BigNum;
 use crate::params::BigNumParams;
 use crate::params::BigNumParamsGetter;
 use crate::utils::u60_representation::U60Repr;
 
 pub struct {}{} {{}}
 
+pub type {} = BigNum<{}, {}, {}{}>;
+
 impl BigNumParamsGetter<{},{}> for {}{} {{
     fn get_params() -> BigNumParams<{}, {}> {{
         {}_PARAMS
     }}
-    }}",
-        name, params, limbs, bits, name, params, limbs, bits, name
+}}",
+        name, params, // 1st line
+        name, limbs, bits, name, params, // 2nd line
+        limbs, bits, name, params, // 3rd line
+        limbs, bits, // 4th line
+        name // 5th line
     ));
 
     let mut r: String = String::from("");
     r += &String::from(format!(
-        "pub global {}_PARAMS: BigNumParams<{}, {}> = BigNumParams {{
-        has_multiplicative_inverse: {},
-        modulus: [
-            ",
+        "
+pub global {}_PARAMS: BigNumParams<{}, {}> = BigNumParams {{
+    has_multiplicative_inverse: {},
+    modulus: [
+        ",
         name.as_str(),
         limbs,
         bits,
@@ -185,9 +193,9 @@ impl BigNumParamsGetter<{},{}> for {}{} {{
     let bytes: Vec<u8> = modulus[num_limbs - 1].to_bytes_be();
     r += &format!(
         "0x{}
-        ],
-        double_modulus: [
-            ",
+    ],
+    double_modulus: [
+        ",
         hex::encode(&bytes)
     );
     for i in 0..num_limbs - 1 {
@@ -197,9 +205,9 @@ impl BigNumParamsGetter<{},{}> for {}{} {{
     let bytes: Vec<u8> = double_modulus[num_limbs - 1].to_bytes_be();
     r += &format!(
         "0x{}
-        ],
-        modulus_u60: U60Repr {{ limbs: [
-            ",
+    ],
+    modulus_u60: U60Repr {{ limbs: [
+        ",
         hex::encode(&bytes)
     );
     for j in 0..2 {
@@ -212,9 +220,9 @@ impl BigNumParamsGetter<{},{}> for {}{} {{
             r += &format!("0x{}, ", hex::encode(&bytes));
         } else {
             r += &format!(
-                "0x{}]}},
-        modulus_u60_x4: U60Repr {{ limbs: [
-            ",
+            "0x{}]}},
+    modulus_u60_x4: U60Repr {{ limbs: [
+        ",
                 hex::encode(&bytes)
             );
         }
@@ -231,8 +239,8 @@ impl BigNumParamsGetter<{},{}> for {}{} {{
         } else {
             r += &format!(
                 "0x{}] }},
-        redc_param: [
-            ",
+    redc_param: [
+        ",
                 hex::encode(&bytes)
             );
         }
@@ -244,7 +252,7 @@ impl BigNumParamsGetter<{},{}> for {}{} {{
     let bytes: Vec<u8> = redc_param[num_limbs - 1].to_bytes_be();
     r += &format!(
         "0x{}
-        ]
+    ]
 }};
 ",
         hex::encode(&bytes)
