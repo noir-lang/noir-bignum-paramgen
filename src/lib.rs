@@ -10,8 +10,6 @@ struct BNInstance {
     has_multiplicative_inverse: bool,
     modulus: Vec<BigUint>,
     double_modulus: Vec<BigUint>,
-    modulus_u60: [Vec<BigUint>; 2],
-    modulus_u60_x4: [Vec<BigUint>; 4],
     redc_param: Vec<BigUint>,
 }
 
@@ -75,39 +73,11 @@ pub fn split_into_120_bit_limbs(_input: &BigUint, num_bits: usize) -> Vec<BigUin
 }
 
 /**
- * @brief split a BigUint into a vector of 60-bit slices
- *
- * @details the 60-bit slices represent a noir U60Repr object. NUM_CHUNKS reqpresents the size-multiplier of the U60Repr
- *          (either 2 or 4)
- */
-pub fn split_into_60_bit_limbs<const NUM_CHUNKS: usize>(
-    _input: &BigUint,
-    num_bits: usize,
-) -> [Vec<BigUint>; NUM_CHUNKS] {
-    let num_limbs: usize = (num_bits / 120) + (num_bits % 120 != 0) as usize;
-    let mut input = _input.clone();
-    let one = BigUint::from(1 as u64);
-    let mask: BigUint = (one.clone() << 60 as usize) - one.clone();
-
-    const INNER: Vec<BigUint> = Vec::new();
-    let mut r: [Vec<BigUint>; NUM_CHUNKS] = [INNER; NUM_CHUNKS];
-    for i in 0..(num_limbs as u64 * NUM_CHUNKS as u64) {
-        let slice = input.clone() & mask.clone();
-        input = input.clone() >> 60 as usize;
-        let idx: usize = (i / num_limbs as u64) as usize;
-        r[idx].push(slice);
-    }
-    r
-}
-
-/**
  * @brief given a modulus BigUint, compute a BNInstance object
  */
 fn compute_bn_instance_parameters(modulus: &BigUint, num_bits: usize) -> BNInstance {
     let modulus_limbs = split_into_120_bit_limbs(&modulus, num_bits);
     let double_modulus = compute_double_modulus(&modulus, num_bits);
-    let modulus_u60: [Vec<BigUint>; 2] = split_into_60_bit_limbs(&modulus, num_bits);
-    let modulus_u60_x4: [Vec<BigUint>; 4] = split_into_60_bit_limbs(&modulus, num_bits);
     let has_multiplicative_inverse = is_prime(&modulus);
     let redc_param =
         split_into_120_bit_limbs(&compute_barrett_reduction_parameter(&modulus), num_bits);
@@ -115,8 +85,6 @@ fn compute_bn_instance_parameters(modulus: &BigUint, num_bits: usize) -> BNInsta
         has_multiplicative_inverse,
         modulus: modulus_limbs,
         double_modulus,
-        modulus_u60,
-        modulus_u60_x4,
         redc_param,
     }
 }
@@ -134,8 +102,6 @@ fn compute_bn_instance_string(
         has_multiplicative_inverse,
         modulus,
         double_modulus,
-        modulus_u60,
-        modulus_u60_x4,
         redc_param,
     } = instance;
     let num_limbs: usize = num_bits / 120 + (num_bits % 120 != 0) as usize;
@@ -153,18 +119,19 @@ fn compute_bn_instance_string(
     let mut param_str: String = String::from("");
     param_str += &String::from(format!(
         "
-use crate::params::BigNumParams;
-use crate::params::BigNumParamsGetter;
-use crate::utils::u60_representation::U60Repr;
+    use bignum::params::BigNumParams;
+    use bignum::params::BigNumParamsGetter;
 
-pub struct {}{} {{}}
+    pub struct {}{} {{}}
+    pub type {} = BigNum<{}, {}, {}{}>;
+
 
 impl BigNumParamsGetter<{},{}> for {}{} {{
     fn get_params() -> BigNumParams<{}, {}> {{
         {}_PARAMS
     }}
     }}",
-        name, params, limbs, bits, name, params, limbs, bits, name
+        name, params, name, limbs, bits, name, params, limbs, bits, name, params, limbs, bits, name
     ));
 
     let mut r: String = String::from("");
@@ -198,45 +165,10 @@ impl BigNumParamsGetter<{},{}> for {}{} {{
     r += &format!(
         "0x{}
         ],
-        modulus_u60: U60Repr {{ limbs: [
+        redc_param: [
             ",
         hex::encode(&bytes)
     );
-    for j in 0..2 {
-        for i in 0..num_limbs as usize - 1 {
-            let bytes = modulus_u60[j][i].to_bytes_be();
-            r += &format!("0x{}, ", hex::encode(&bytes));
-        }
-        let bytes = modulus_u60[j][num_limbs as usize - 1].to_bytes_be();
-        if j == 0 {
-            r += &format!("0x{}, ", hex::encode(&bytes));
-        } else {
-            r += &format!(
-                "0x{}]}},
-        modulus_u60_x4: U60Repr {{ limbs: [
-            ",
-                hex::encode(&bytes)
-            );
-        }
-    }
-
-    for j in 0..4 {
-        for i in 0..num_limbs as usize - 1 {
-            let bytes = modulus_u60_x4[j][i].to_bytes_be();
-            r += &format!("0x{}, ", hex::encode(&bytes));
-        }
-        let bytes = modulus_u60_x4[j][num_limbs as usize - 1].to_bytes_be();
-        if j < 3 {
-            r += &format!("0x{}, ", hex::encode(&bytes));
-        } else {
-            r += &format!(
-                "0x{}] }},
-        redc_param: [
-            ",
-                hex::encode(&bytes)
-            );
-        }
-    }
     for i in 0..num_limbs - 1 {
         let bytes = redc_param[i].to_bytes_be();
         r += &format!("0x{}, ", hex::encode(&bytes));
@@ -245,66 +177,11 @@ impl BigNumParamsGetter<{},{}> for {}{} {{
     r += &format!(
         "0x{}
         ]
-}};
-",
+    }};
+    ",
         hex::encode(&bytes)
     );
     param_str + "\n" + &r
-}
-
-/**
- * @brief given a BNInstance, construct a string that represents noir code that defines a runtime_bignum::BigNumInstance object
- */
-fn compute_runtime_bn_instance_string(
-    num_bits: usize,
-    instance: BNInstance,
-    name: String,
-) -> String {
-    let BNInstance {
-        has_multiplicative_inverse,
-        modulus,
-        double_modulus: _,
-        modulus_u60: _,
-        modulus_u60_x4: _,
-        redc_param,
-    } = instance;
-    let num_limbs: usize = num_bits / 120 + (num_bits % 120 != 0) as usize;
-
-    let limbs: String = String::from(itoa::Buffer::new().format(num_limbs as u64));
-    let tparam: String = name.clone() + &String::from("_Params");
-
-    let mut r: String = String::from("");
-
-    r += &String::from(format!(
-        "let {}: BigNumInstance<{}, {}> = BigNumInstance::new(
-    [
-        ",
-        name, limbs, tparam
-    ));
-    for i in 0..modulus.len() - 1 {
-        let bytes = modulus[i].to_bytes_be();
-        r += &String::from(format!("0x{}, ", hex::encode(&bytes)));
-    }
-    let bytes: Vec<u8> = modulus[modulus.len() - 1].to_bytes_be();
-    r += &String::from(format!(
-        "0x{}
-    ],
-    [
-        ",
-        hex::encode(&bytes)
-    ));
-    for i in 0..modulus.len() - 1 {
-        let bytes = redc_param[i].to_bytes_be();
-        r += &String::from(format!("0x{}, ", hex::encode(&bytes)));
-    }
-    let bytes: Vec<u8> = redc_param[modulus.len() - 1].to_bytes_be();
-    r += &String::from(format!(
-        "0x{}
-    ]
-);",
-        hex::encode(&bytes)
-    ));
-    r
 }
 
 /**
@@ -344,32 +221,6 @@ pub fn bignum_from_string(bignum_str: String) -> BigUint {
         Err(error) => panic!("Problem parsing input integer: {error:?}"),
     };
     modulus
-}
-
-/**
- * @brief Compute noir code for a runtime_bignum::BigNumInstance given a modulus String
- */
-pub fn bn_runtime_instance_from_string(modulus_str: String, name: String) -> String {
-    let modulus = bignum_from_string(modulus_str);
-    let num_bits = modulus.bits();
-    let result = compute_runtime_bn_instance_string(
-        num_bits,
-        compute_bn_instance_parameters(&modulus, num_bits),
-        name,
-    );
-    result
-}
-
-/**
- * @brief Compute noir code for a runtime_bignum::BigNumInstance given a modulus String
- */
-pub fn bn_runtime_instance(modulus: BigUint, num_bits: usize, name: String) -> String {
-    let result = compute_runtime_bn_instance_string(
-        num_bits,
-        compute_bn_instance_parameters(&modulus, num_bits),
-        name,
-    );
-    result
 }
 
 /**
@@ -459,4 +310,11 @@ pub fn is_prime(modulus: &BigUint) -> bool {
     let modulus_minus_1 = modulus.clone() - BigUint::from(1 as u64);
     let a_to_the_power = a.modpow(&modulus_minus_1, modulus);
     a_to_the_power == BigUint::from(1 as u64)
+}
+
+#[test]
+fn test_is_prime() {
+    let modulus = BigUint::from(3u64);
+    let is_prime = is_prime(&modulus);
+    assert!(is_prime);
 }

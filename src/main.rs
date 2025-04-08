@@ -256,8 +256,7 @@ fn empty_blurb() -> String {
 }
 
 use noir_bignum_paramgen::{
-    bignum_from_string, bn_instance_from_string, bn_limbs_from_string,
-    bn_runtime_instance_from_string, redc_limbs_from_string,
+    bignum_from_string, bn_instance_from_string, bn_limbs_from_string, redc_limbs_from_string,
 };
 
 fn bignum_from_string_slices<const K: usize>(slices: [&str; K]) -> String {
@@ -682,9 +681,6 @@ EXAMPLE:
         match instruction_type.as_str() {
             "instance" => {
                 result = bn_instance_from_string(input_number, name, false);
-            }
-            "runtime_instance" => {
-                result = bn_runtime_instance_from_string(input_number, name);
             }
             "limbs" => {
                 result = bn_limbs_from_string(input_number);
