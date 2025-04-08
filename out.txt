@@ -1,16 +1,8 @@
 
-    use bignum::params::BigNumParams;
-    use bignum::params::BigNumParamsGetter;
+use bignum::BigNum;
+use bignum::derive_bignum_impl;
+use bignum::params::BigNumParams;
 
-    pub struct MNT4_753_Fr_Params {}
-    pub type MNT4_753_Fr = BigNum<7, 753, MNT4_753_Fr_Params>;
-
-
-impl BigNumParamsGetter<7,753> for MNT4_753_Fr_Params {
-    fn get_params() -> BigNumParams<7, 753> {
-        MNT4_753_Fr_PARAMS
-    }
-    }
 pub global MNT4_753_Fr_PARAMS: BigNumParams<7, 753> = BigNumParams {
         has_multiplicative_inverse: true,
         modulus: [
@@ -23,4 +15,8 @@ pub global MNT4_753_Fr_PARAMS: BigNumParams<7, 753> = BigNumParams {
             0x2dae11d15867718ec70f5ff059bba2, 0x76d65fe7e00ba391da260f2623ff9a, 0x140a086edaa60c58eb476bdedcb352, 0x300e0ede1965cbf72f0aa9bee81208, 0x7fb932cae2aba9a5d17c1ff73538ba, 0x82727c6eaef38056aaa0aaedb05746, 0x242f916cfa
         ]
     };
+
+#[derive_bignum_impl(7, 753, quote { MNT4_753_Fr_PARAMS })]
+pub struct MNT4_753_Fr {limbs: [u128; 7]}
+
     

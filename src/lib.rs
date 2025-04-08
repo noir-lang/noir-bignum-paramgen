@@ -119,20 +119,10 @@ fn compute_bn_instance_string(
     let mut param_str: String = String::from("");
     param_str += &String::from(format!(
         "
-    use bignum::params::BigNumParams;
-    use bignum::params::BigNumParamsGetter;
-
-    pub struct {}{} {{}}
-    pub type {} = BigNum<{}, {}, {}{}>;
-
-
-impl BigNumParamsGetter<{},{}> for {}{} {{
-    fn get_params() -> BigNumParams<{}, {}> {{
-        {}_PARAMS
-    }}
-    }}",
-        name, params, name, limbs, bits, name, params, limbs, bits, name, params, limbs, bits, name
-    ));
+use crate::bignum::BigNum;
+use crate::bignum::derive_bignum_impl;
+use crate::params::BigNumParams;
+"));
 
     let mut r: String = String::from("");
     r += &String::from(format!(
@@ -178,9 +168,14 @@ impl BigNumParamsGetter<{},{}> for {}{} {{
         "0x{}
         ]
     }};
+
+#[derive_bignum_impl({}, {}, quote {{ {}_PARAMS }})]
+pub struct {} {{limbs: [u128; {}]}}
+
     ",
-        hex::encode(&bytes)
+        hex::encode(&bytes), limbs, bits, name, name, limbs 
     );
+    
     param_str + "\n" + &r
 }
 
