@@ -120,7 +120,7 @@ fn compute_bn_instance_string(
     param_str += &String::from(format!(
         "
 use crate::bignum::BigNum;
-use crate::bignum::derive_bignum_impl;
+use crate::bignum::derive_bignum;
 use crate::params::BigNumParams;
 "));
 
@@ -169,7 +169,7 @@ use crate::params::BigNumParams;
         ]
     }};
 
-#[derive_bignum_impl({}, {}, quote {{ {}_PARAMS }})]
+#[derive_bignum({}, {}, quote {{ {}_PARAMS }})]
 pub struct {} {{limbs: [u128; {}]}}
 
     ",
