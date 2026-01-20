@@ -13,7 +13,7 @@ struct BNInstance {
     redc_param: Vec<BigUint>,
 }
 
-const BARRETT_REDUCTION_OVERFLOW_BITS: usize = 4;
+const BARRETT_REDUCTION_OVERFLOW_BITS: usize = 6;
 /**
  * @brief compute the reduction parameter used in Barrett reduction
  *        redc param = 2 * ceil(log2(modulus))
